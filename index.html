@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Daily Meal Nutrition Advisor</title>
+    <title>Nutrition Counter</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -11,12 +11,12 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6; /* Light gray background */
+            background-color: #ffefda; /* Light gray background */
         }
         /* Custom styles for loading spinner */
         .loader {
-            border: 4px solid #f3f3f3; /* Light grey */
-            border-top: 4px solid #3b82f6; /* Blue */
+            border: 4px solid #ffefda; /* Light grey */
+            border-top: 4px solid #b3c25e; /* Blue */
             border-radius: 50%;
             width: 30px;
             height: 30px;
@@ -30,19 +30,19 @@
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
     <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl border border-gray-200">
-        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Daily Meal Nutrition Advisor</h1>
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Your Nutrition Advisor</h1>
 
         <div class="mb-6">
-            <label for="mealInput" class="block text-gray-700 text-lg font-medium mb-2">Enter your daily meals:</label>
+            <label for="mealInput" class="block text-gray-700 text-lg font-medium mb-2">Enter your favourite meals!:</label>
             <textarea
                 id="mealInput"
                 class="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 text-base"
                 rows="8"
                 placeholder="Example:
-Breakfast: 2 eggs, 1 slice whole wheat toast, 1 apple
-Lunch: Grilled chicken salad with mixed greens, tomatoes, cucumber, olive oil dressing
-Dinner: Salmon, steamed broccoli, quinoa
-Snacks: Handful of almonds, Greek yogurt"
+Breakfast: 1 sugarcane juice, dumplings, 1 bowl of pho
+Lunch: Pineapple pizza, tomatoes, cucumber, 1 banh mi
+Dinner: Salmon soup, microwavable pasta, satay
+Snacks: Banana tiramasu, roasted spaghetii with chilli sauce"
             ></textarea>
         </div>
 
@@ -72,48 +72,55 @@ Snacks: Handful of almonds, Greek yogurt"
 
         // Get global variables provided by the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-        // Initialize Firebase
+        // Initialize Firebase only if the config is available (i.e., when running in Canvas)
         let app;
         let db;
         let auth;
         let userId = 'anonymous'; // Default userId
 
-        try {
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
+        if (firebaseConfig) {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
 
-            // Sign in with custom token or anonymously
-            if (initialAuthToken) {
-                signInWithCustomToken(auth, initialAuthToken)
-                    .then((userCredential) => {
-                        userId = userCredential.user.uid;
-                        console.log("Signed in with custom token. User ID:", userId);
-                    })
-                    .catch((error) => {
-                        console.error("Error signing in with custom token:", error);
-                        signInAnonymously(auth)
-                            .then(() => {
-                                userId = auth.currentUser?.uid || crypto.randomUUID();
-                                console.log("Signed in anonymously due to token error. User ID:", userId);
-                            })
-                            .catch((anonError) => console.error("Anonymous sign-in error:", anonError));
-                    });
-            } else {
-                signInAnonymously(auth)
-                    .then(() => {
-                        userId = auth.currentUser?.uid || crypto.randomUUID();
-                        console.log("Signed in anonymously. User ID:", userId);
-                    })
-                    .catch((error) => console.error("Anonymous sign-in error:", error));
+                // Sign in with custom token or anonymously
+                if (initialAuthToken) {
+                    signInWithCustomToken(auth, initialAuthToken)
+                        .then((userCredential) => {
+                            userId = userCredential.user.uid;
+                            console.log("Signed in with custom token. User ID:", userId);
+                        })
+                        .catch((error) => {
+                            console.error("Error signing in with custom token:", error);
+                            signInAnonymously(auth)
+                                .then(() => {
+                                    userId = auth.currentUser?.uid || crypto.randomUUID();
+                                    console.log("Signed in anonymously due to token error. User ID:", userId);
+                                })
+                                .catch((anonError) => console.error("Anonymous sign-in error:", anonError));
+                        });
+                } else {
+                    signInAnonymously(auth)
+                        .then(() => {
+                            userId = auth.currentUser?.uid || crypto.randomUUID();
+                            console.log("Signed in anonymously. User ID:", userId);
+                        })
+                        .catch((error) => console.error("Anonymous sign-in error:", error));
+                }
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                document.getElementById('errorMessage').classList.remove('hidden');
+                document.getElementById('errorMessage').querySelector('p').textContent = 'Failed to initialize Firebase. This usually happens when running outside the Canvas environment without a proper Firebase project configuration.';
             }
-        } catch (error) {
-            console.error("Firebase initialization failed:", error);
-            document.getElementById('errorMessage').classList.remove('hidden');
-            document.getElementById('errorMessage').querySelector('p').textContent = 'Failed to initialize Firebase. Please try again.';
+        } else {
+            console.warn("Firebase configuration not found. Skipping Firebase initialization.");
+            // Optionally, you could show a message to the user that Firebase features are not available
+            // document.getElementById('errorMessage').classList.remove('hidden');
+            // document.getElementById('errorMessage').querySelector('p').textContent = 'Firebase features are not available in this environment.';
         }
 
 
