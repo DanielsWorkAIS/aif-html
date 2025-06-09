@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Meal Nutrition Advisor</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font import (Inter) */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+        /* Custom styles for loading spinner */
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3b82f6; /* Blue */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl border border-gray-200">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Daily Meal Nutrition Advisor</h1>
+
+        <div class="mb-6">
+            <label for="mealInput" class="block text-gray-700 text-lg font-medium mb-2">Enter your daily meals:</label>
+            <textarea
+                id="mealInput"
+                class="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 text-base"
+                rows="8"
+                placeholder="Example:
+Breakfast: 2 eggs, 1 slice whole wheat toast, 1 apple
+Lunch: Grilled chicken salad with mixed greens, tomatoes, cucumber, olive oil dressing
+Dinner: Salmon, steamed broccoli, quinoa
+Snacks: Handful of almonds, Greek yogurt"
+            ></textarea>
+        </div>
+
+        <button
+            id="analyzeButton"
+            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center"
+        >
+            <span id="buttonText">Get Nutrition Advice</span>
+            <div id="loadingSpinner" class="loader ml-3 hidden"></div>
+        </button>
+
+        <div id="adviceOutput" class="mt-8 p-6 bg-blue-50 rounded-lg border border-blue-200 text-gray-800 text-base leading-relaxed hidden">
+            <h2 class="text-xl font-semibold text-blue-800 mb-3">Nutrition Advice:</h2>
+            <div id="adviceContent"></div>
+        </div>
+
+        <div id="errorMessage" class="mt-4 p-4 bg-red-100 rounded-lg border border-red-300 text-red-700 text-sm hidden">
+            <p>An error occurred. Please try again later.</p>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import necessary Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Get global variables provided by the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Initialize Firebase
+        let app;
+        let db;
+        let auth;
+        let userId = 'anonymous'; // Default userId
+
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            // Sign in with custom token or anonymously
+            if (initialAuthToken) {
+                signInWithCustomToken(auth, initialAuthToken)
+                    .then((userCredential) => {
+                        userId = userCredential.user.uid;
+                        console.log("Signed in with custom token. User ID:", userId);
+                    })
+                    .catch((error) => {
+                        console.error("Error signing in with custom token:", error);
+                        signInAnonymously(auth)
+                            .then(() => {
+                                userId = auth.currentUser?.uid || crypto.randomUUID();
+                                console.log("Signed in anonymously due to token error. User ID:", userId);
+                            })
+                            .catch((anonError) => console.error("Anonymous sign-in error:", anonError));
+                    });
+            } else {
+                signInAnonymously(auth)
+                    .then(() => {
+                        userId = auth.currentUser?.uid || crypto.randomUUID();
+                        console.log("Signed in anonymously. User ID:", userId);
+                    })
+                    .catch((error) => console.error("Anonymous sign-in error:", error));
+            }
+        } catch (error) {
+            console.error("Firebase initialization failed:", error);
+            document.getElementById('errorMessage').classList.remove('hidden');
+            document.getElementById('errorMessage').querySelector('p').textContent = 'Failed to initialize Firebase. Please try again.';
+        }
+
+
+        // Get references to HTML elements
+        const mealInput = document.getElementById('mealInput');
+        const analyzeButton = document.getElementById('analyzeButton');
+        const adviceOutput = document.getElementById('adviceOutput');
+        const adviceContent = document.getElementById('adviceContent');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const buttonText = document.getElementById('buttonText');
+        const errorMessage = document.getElementById('errorMessage');
+
+        analyzeButton.addEventListener('click', async () => {
+            const mealText = mealInput.value.trim();
+
+            if (!mealText) {
+                // Show a simple message box for empty input
+                adviceOutput.classList.remove('hidden');
+                adviceOutput.classList.add('bg-yellow-100', 'border-yellow-300', 'text-yellow-800');
+                adviceOutput.classList.remove('bg-blue-50', 'border-blue-200', 'text-gray-800');
+                adviceContent.innerHTML = '<h2 class="text-xl font-semibold text-yellow-800 mb-3">Input Required:</h2><p>Please enter your daily meal details to get advice.</p>';
+                return;
+            }
+
+            // Reset UI state
+            adviceOutput.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+            loadingSpinner.classList.remove('hidden');
+            buttonText.textContent = 'Analyzing...';
+            analyzeButton.disabled = true; // Disable button during processing
+
+            try {
+                let chatHistory = [];
+                const prompt = `Given the following daily meal input, provide a detailed nutritional analysis (mentioning estimated calories, macronutrients like protein, carbs, fats, and key micronutrients if possible), and then offer personalized dietary advice for a healthy adult. Structure your response clearly with headings for analysis and advice.
+
+Daily Meals:
+${mealText}`;
+
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                const payload = { contents: chatHistory };
+                const apiKey = "AIzaSyC6oF9higxhjjOJebCfn8x_tWOwGN_G7V8"; // Your provided API key
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    adviceContent.innerHTML = text.replace(/\n/g, '<br>'); // Display advice, replacing newlines with <br>
+                    adviceOutput.classList.remove('hidden');
+                    // Ensure the output box is styled for success
+                    adviceOutput.classList.remove('bg-yellow-100', 'border-yellow-300', 'text-yellow-800');
+                    adviceOutput.classList.add('bg-blue-50', 'border-blue-200', 'text-gray-800');
+                } else {
+                    errorMessage.classList.remove('hidden');
+                    errorMessage.querySelector('p').textContent = 'Could not get a valid response from the AI. Please try rephrasing your meal input.';
+                    console.error("Unexpected AI response structure:", result);
+                }
+            } catch (error) {
+                console.error("Error fetching nutrition advice:", error);
+                errorMessage.classList.remove('hidden');
+                errorMessage.querySelector('p').textContent = `Failed to get nutrition advice: ${error.message}. Please check your input or try again later.`;
+            } finally {
+                loadingSpinner.classList.add('hidden');
+                buttonText.textContent = 'Get Nutrition Advice';
+                analyzeButton.disabled = false; // Re-enable button
+            }
+        });
+    </script>
+</body>
+</html>
